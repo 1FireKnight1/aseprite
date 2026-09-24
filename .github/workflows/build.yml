@@ -111,3 +111,11 @@ jobs:
         export ASEPRITE=$PWD/build/bin/aseprite
         cd tests
         $XVFB bash run-tests.sh
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        # Динамическое имя, чтобы файлы для разных ОС не перезаписывали друг друга
+        name: aseprite-${{ matrix.os }}-${{ matrix.build_type }}-${{ matrix.ui }}
+        # Путь к папке, где лежит собранный exe-файл (и другие бинарники)
+        path: build/bin/
+        if-no-files-found: error
