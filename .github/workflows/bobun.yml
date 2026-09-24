@@ -1,0 +1,74 @@
+name: Build Aseprite Windows 11 x64
+
+on:
+  workflow_dispatch: # Позволяет запускать сборку вручную из вкладки Actions
+  push:
+    branches: [ main ] # Или ваша основная ветка
+
+jobs:
+  build-windows:
+    name: Windows 11 x64 (MSVC + Ninja)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Aseprite source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive # Обязательно для получения всех зависимостей
+
+      - name: Setup Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v4
+
+      - name: Setup MSVC (x64 Native Tools)
+        # Этот шаг эмулирует запуск "x64 Native Tools Command Prompt for VS 2022"
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Download pre-built Skia
+        shell: pwsh
+        run: |
+          $SkiaDir = "${{ github.workspace }}\deps\skia"
+          New-Item -ItemType Directory -Force -Path $SkiaDir
+          
+          # ВНИМАНИЕ: Проверьте актуальную ссылку на предсобранный Skia на странице:
+          # https://github.com/aseprite/skia/releases
+          # Ниже приведена ссылка для ветки aseprite-m124 (Windows x64 Release). 
+          # Имя файла может незначительно отличаться в новых релизах.
+          $SkiaUrl = "https://github.com/aseprite/skia/releases/download/m124/skia-m124-windows-x64-release.zip"
+          
+          Write-Host "Downloading Skia from $SkiaUrl..."
+          Invoke-WebRequest -Uri $SkiaUrl -OutFile "${{ github.workspace }}\skia.zip"
+          Write-Host "Extracting Skia..."
+          Expand-Archive -Path "${{ github.workspace }}\skia.zip" -DestinationPath $SkiaDir
+
+          # Защита от случая, если внутри архива есть дополнительная папка skia
+          if (Test-Path "${{ github.workspace }}\deps\skia\skia") {
+              Move-Item -Path "${{ github.workspace }}\deps\skia\skia\*" -Destination "${{ github.workspace }}\deps\skia" -Force
+              Remove-Item -Path "${{ github.workspace }}\deps\skia\skia" -Force -Recurse
+          }
+
+      - name: Configure CMake
+        shell: cmd
+        run: |
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ^
+                -DLAF_BACKEND=skia ^
+                -DSKIA_DIR=${{ github.workspace }}\deps\skia ^
+                -DSKIA_LIBRARY_DIR=${{ github.workspace }}\deps\skia\out\Release-x64 ^
+                -DSKIA_LIBRARY=${{ github.workspace }}\deps\skia\out\Release-x64\skia.lib ^
+                -G Ninja ..
+
+      - name: Build Aseprite
+        shell: cmd
+        run: |
+          cd build
+          ninja aseprite
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aseprite-windows-x64
+          path: ${{ github.workspace }}/build/bin/
+          if-no-files-found: error
