@@ -8,7 +8,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest]
-        build_type: [RelWithDebInfo]
+        build_type: [Release]
         ui: [gui]
         scripting: [lua]
     steps:
@@ -104,11 +104,19 @@ jobs:
         export ASEPRITE=$PWD/build/bin/aseprite
         cd tests
         $XVFB bash run-tests.sh
+    - name: Cleanup build folder (remove debug symbols)
+      shell: pwsh
+      run: |
+        # Удаляем тяжелые файлы отладки и статические библиотеки, если они попали в папку bin
+        Remove-Item -Path build/bin/*.pdb -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path build/bin/*.lib -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path build/bin/*.obj -Force -ErrorAction SilentlyContinue
+        Write-Host "Folder cleaned up. Remaining files:"
+        Get-ChildItem -Path build/bin/ | Select-Object Name, @{Name="Size(MB)";Expression={[math]::Round($_.Length/1MB, 2)}}
+
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        # Динамическое имя, чтобы файлы для разных ОС не перезаписывали друг друга
-        name: aseprite-${{ matrix.os }}-${{ matrix.build_type }}-${{ matrix.ui }}
-        # Путь к папке, где лежит собранный exe-файл (и другие бинарники)
+        name: aseprite-windows-x64-release
         path: build/bin/
         if-no-files-found: error
